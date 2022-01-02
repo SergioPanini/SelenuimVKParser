@@ -1,6 +1,8 @@
 from typing import List, Optional, Dict
 import time
-from pprint import pprint
+import datetime
+from base import BaseItem, CommentItem, CommunityItem, PostItem
+
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
@@ -9,7 +11,10 @@ from selenium.webdriver.common.by import By
 
 class BrowserManager():
     '''Класс браузера'''
-    broswer = webdriver.Firefox()
+    
+    def __init__(self) -> None:
+        self.broswer = webdriver.Firefox()
+    
 
     def get_communities(self, search_text: str, limit: int = None) -> Optional[List[str]]:
         '''Находит ссылки на сообщества связаные по ключевому слову search_text'''
@@ -30,7 +35,7 @@ class BrowserManager():
         #Собираем ссылки на сообщества
         urls = []
         for item in search_auto_rows_item.find_elements(By.CLASS_NAME, "groups_row"):
-            urls.append(item.find_element(By.CLASS_NAME, 'title').find_element(By.TAG_NAME, 'a').get_attribute('href'))
+            urls.append(self._prepere_community_to_url(item))
         
         return urls
     
@@ -65,13 +70,13 @@ class BrowserManager():
         except NoSuchElementException:
             return None
         
-        self._load_all_items(posts_container, (By.CLASS_NAME, '_post'), limit)
+        self._load_all_items(posts_container, (By.CLASS_NAME, 'post_signed'), limit)
 
-        posts = posts_container.find_elements(By.CLASS_NAME, '_post')
+        posts = posts_container.find_elements(By.CLASS_NAME, 'post_signed')
 
         posts_url = []
         for post in posts:
-            posts_url.append(f"{url_communiti}?w={post.get_attribute('id').replace('post', 'wall')}")
+            posts_url.append(self._prepere_post_to_url(post))
         
         return posts_url
     
@@ -127,7 +132,24 @@ class BrowserManager():
                 'text' : comment.find_element(By.CLASS_NAME, 'reply_text').text
             }
     
-    def get_item(self, item_container, args_find: dict, limit: int = None):
+    @staticmethod
+    def _prepere_community_to_url(item):
+        '''Парсит сообщество и находит в нем ссылку на себя'''
+        item.find_element(By.CLASS_NAME, 'title').find_element(By.TAG_NAME, 'a').get_attribute('href')
+
+    @staticmethod
+    def _prepere_post_to_url(post, url_communiti: str) -> str:
+        '''Пассит пост из сообщества и находит в нем ссылку на себя'''
+        return f"{url_communiti}?w={post.get_attribute('id').replace('post', 'wall')}"
+
+
+class CustomBrowserManager:
+    '''Класс браузера'''
+
+    def __init__(self) -> None:
+        self.broswer = webdriver.Firefox()
+
+    def load_items(self, item_container, args_find: dict, limit: int = None):
         '''Генератор для получаения элементов с загрузкой их по Ajax'''
 
         items = item_container.find_elements(*args_find)
@@ -138,7 +160,7 @@ class BrowserManager():
 
             N += 1
 
-            if N >= limit:
+            if limit and N >= limit:
                 break
             #Если номер элемента для отдачи больше, чем сейчас загружено, то загружаем еще элементы
             if N >= group_rows_count:
@@ -156,38 +178,53 @@ class BrowserManager():
                 yield new_items[N]
 
             else:
-                yield items[N] 
-    
-    def get_posts_generator(self, url_communiti: str, limit: int = None) -> List[str]:
-        '''Это генератор для получения постов'''
+                yield items[N]
 
-        #Загружаем страницу с поставми
-        self.broswer.get(url_communiti)
-        
+    def _generator(self, item: BaseItem, url: str, limit: int = None):
+        '''Базовая логика генератора для получаения элемента'''
+
+        #Создаем новую вкладку, запоминаем и переключается на ее 
+        self.broswer.execute_script(f"window.open('', '{url}');")
+        generator_handler = self.broswer.window_handles[-1]
+        self.broswer.switch_to.window(generator_handler)
+
+        #Загружаем страницу
+        self.broswer.get(url)
+        time.sleep(5)
+
         #Находим контейнер постов
         try:
-            posts_container = self.broswer.find_element_by_id('page_wall_posts')
+            posts_container = self.broswer.find_element_by_class_name(item.container_tag)
         except NoSuchElementException:
             return None
+        
 
         #Создаем генератор для получения обьектов, в нашем случаем постов
-        post_generator = self.get_item(posts_container, (By.CLASS_NAME, '_post'), limit)
-
+        post_generator = self.load_items(posts_container, (By.CLASS_NAME, item.item_tag), limit)
         while True:
 
             try:
-                new_post = next(post_generator)
+                self.broswer.switch_to.window(generator_handler)
+                new_item = next(post_generator)
             except StopIteration:
                 break
 
-            yield self._prepere_post_to_url(new_post, url_communiti)
+            yield item.prepeare(new_item, url)
+        
+        self.broswer.close()
+    
+    def communities(self, search_tetx: str, limit: int = None) -> str:
+        '''Генератор, который возвращяет ссылки на сообщества'''
 
-    @staticmethod
-    def _prepere_community_to_url(item):
-        '''Парсит сообщество и находит в нем ссылку на себя'''
-        item.find_element(By.CLASS_NAME, 'title').find_element(By.TAG_NAME, 'a').get_attribute('href')
+        url = f'https://vk.com/search?c[q]={search_tetx}&c[section]=communities&c[type]=4'
+        return self._generator(CommunityItem, url, limit)
+    
+    def posts(self, community_url: str, limit: int = None) -> str:
+        '''Генератор, который возвращяет ссылки на посты из сообщества'''
 
-    @staticmethod
-    def _prepere_post_to_url(post, url_communiti: str) -> str:
-        '''Пассит пост из сообщества и находит в нем ссылку на себя'''
-        return f"{url_communiti}?w={post.get_attribute('id').replace('post', 'wall')}"
+        return self._generator(PostItem, community_url, limit)
+    
+    def comments(self, post_url: str, limit: int = None):
+        '''Генератор, который возвращяет коментарии как словари'''
+
+        return self._generator(CommentItem, post_url, limit)
