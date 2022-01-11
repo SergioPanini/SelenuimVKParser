@@ -162,17 +162,21 @@ class CustomBrowserManager:
 
             if limit and N >= limit:
                 break
+
             #Если номер элемента для отдачи больше, чем сейчас загружено, то загружаем еще элементы
             if N >= group_rows_count:
                 self.broswer.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(3)
-
+                start = datetime.datetime.now()
+                
+                while datetime.datetime.now() - start < datetime.timedelta(seconds=3) and len(item_container.find_elements(*args_find)) != group_rows_count:
+                    print(f'Time: {datetime.datetime.now() - start}. Items: {group_rows_count}. New Items{len(item_container.find_elements(*args_find))}')
+                
                 #Проверяем что мы загрузили новые элементы, иначе элементы закончились и мы заканчиваем работу
                 new_items = item_container.find_elements(*args_find)
                 group_rows_count_new = len(new_items)
                 if group_rows_count_new == group_rows_count:
                     break
-            
+                    
                 group_rows_count = group_rows_count_new
                 items = new_items
                 yield new_items[N]
@@ -209,22 +213,22 @@ class CustomBrowserManager:
             except StopIteration:
                 break
 
-            yield item.prepeare(new_item, url)
+            yield item(new_item, url)
         
         self.broswer.close()
     
-    def communities(self, search_tetx: str, limit: int = None) -> str:
+    def communities(self, search_tetx: str, limit: int = None) -> CommunityItem:
         '''Генератор, который возвращяет ссылки на сообщества'''
 
         url = f'https://vk.com/search?c[q]={search_tetx}&c[section]=communities&c[type]=4'
         return self._generator(CommunityItem, url, limit)
     
-    def posts(self, community_url: str, limit: int = None) -> str:
+    def posts(self, community_url: str, limit: int = None) -> PostItem:
         '''Генератор, который возвращяет ссылки на посты из сообщества'''
 
         return self._generator(PostItem, community_url, limit)
     
-    def comments(self, post_url: str, limit: int = None):
+    def comments(self, post_url: str, limit: int = None) -> CommentItem:
         '''Генератор, который возвращяет коментарии как словари'''
 
         return self._generator(CommentItem, post_url, limit)
