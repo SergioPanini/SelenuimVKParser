@@ -1,0 +1,18 @@
+version: "3.6"
+
+services:
+  postgres:
+    image: postgres
+    ports:
+      - 5432:5432
+    restart: always
+    environment:
+      POSTGRES_USER: <write here>
+      POSTGRES_PASSWORD: <write here>
+      POSTGRES_PORT: <write here>
+      POSTGRES_DB: <write here>
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
+
+volumes:
+  postgres_volume:
