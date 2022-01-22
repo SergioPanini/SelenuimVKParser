@@ -149,7 +149,7 @@ class CustomBrowserManager:
     def __init__(self, chrome = False, web_driver = None) -> None:
         
         if chrome and web_driver:
-            self.browser = webdriver.Chrome(webdriver)
+            self.browser = webdriver.Chrome(web_driver)
         
         else:
             self.broswer = webdriver.Firefox()
