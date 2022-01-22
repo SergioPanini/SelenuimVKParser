@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Iterator
 import time
 import datetime
 from base import BaseItem, CommentItem, CommunityItem, PostItem
@@ -146,8 +146,13 @@ class BrowserManager():
 class CustomBrowserManager:
     '''Класс браузера'''
 
-    def __init__(self) -> None:
-        self.broswer = webdriver.Firefox()
+    def __init__(self, chrome = False, web_driver = None) -> None:
+        
+        if chrome and web_driver:
+            self.browser = webdriver.Chrome(webdriver)
+        
+        else:
+            self.broswer = webdriver.Firefox()
 
     def load_items(self, item_container, args_find: dict, limit: int = None):
         '''Генератор для получаения элементов с загрузкой их по Ajax'''
@@ -194,14 +199,21 @@ class CustomBrowserManager:
 
         #Загружаем страницу
         self.broswer.get(url)
-        time.sleep(5)
-
-        #Находим контейнер постов
-        try:
-            posts_container = self.broswer.find_element_by_class_name(item.container_tag)
-        except NoSuchElementException:
-            return None
         
+        time_start = datetime.datetime.now()
+        while True:
+
+            #Находим контейнер постов
+            try:
+                posts_container = self.broswer.find_element_by_class_name(item.container_tag)
+            except NoSuchElementException:
+                posts_container = None
+            
+            if posts_container or datetime.datetime.now() - time_start > datetime.timedelta(seconds=3):
+                break
+        
+        if not posts_container:
+            return None
 
         #Создаем генератор для получения обьектов, в нашем случаем постов
         post_generator = self.load_items(posts_container, (By.CLASS_NAME, item.item_tag), limit)
@@ -217,18 +229,18 @@ class CustomBrowserManager:
         
         self.broswer.close()
     
-    def communities(self, search_tetx: str, limit: int = None) -> CommunityItem:
+    def communities(self, search_tetx: str, limit: int = None) -> Iterator[CommunityItem]:
         '''Генератор, который возвращяет ссылки на сообщества'''
 
         url = f'https://vk.com/search?c[q]={search_tetx}&c[section]=communities&c[type]=4'
         return self._generator(CommunityItem, url, limit)
     
-    def posts(self, community_url: str, limit: int = None) -> PostItem:
+    def posts(self, community_url: str, limit: int = None) -> Iterator[PostItem]:
         '''Генератор, который возвращяет ссылки на посты из сообщества'''
 
         return self._generator(PostItem, community_url, limit)
     
-    def comments(self, post_url: str, limit: int = None) -> CommentItem:
+    def comments(self, post_url: str, limit: int = None) -> Iterator[CommentItem]:
         '''Генератор, который возвращяет коментарии как словари'''
 
         return self._generator(CommentItem, post_url, limit)
