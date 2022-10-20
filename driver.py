@@ -1,6 +1,8 @@
 from typing import List, Optional, Dict, Iterator
 import time
 import datetime
+
+from webdriver_manager.firefox import GeckoDriverManager
 from base import BaseItem, CommentItem, CommunityItem, PostItem
 
 
@@ -13,7 +15,7 @@ class BrowserManager():
     '''Класс браузера'''
     
     def __init__(self) -> None:
-        self.broswer = webdriver.Firefox()
+        self.broswer = webdriver.Firefox(executable_path=GeckoDriverManager().install())
     
 
     def get_communities(self, search_text: str, limit: int = None) -> Optional[List[str]]:
